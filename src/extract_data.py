@@ -10,6 +10,7 @@ import requests
 import time
 import os
 
+
 def extract_stations():
     """
     Extract bike stations data from JCDecaux API

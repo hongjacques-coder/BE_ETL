@@ -1,0 +1,1 @@
+df.to_csv('data/stations_velo.csv')
