@@ -1,0 +1,13 @@
+# Core data processing libraries
+pandas>=1.5.0
+requests>=2.28.0
+
+# Database connectivity
+psycopg2-binary>=2.9.0
+sqlalchemy>=1.4.0
+
+# For handling CSV files with different encodings
+chardet>=5.0.0
+
+# Optional: for better error messages and debugging
+python-dotenv>=1.0.0
