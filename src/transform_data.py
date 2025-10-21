@@ -1,85 +1,105 @@
-"""
-Data Transformation Module
-
-This module handles cleaning and transforming the extracted data:
-- Clean stations data (remove closed stations, handle missing values)
-"""
-
 import pandas as pd
-import numpy as np
-import json
-import ast
+from geopy.distance import great_circle 
+from pathlib import Path
+import sys
+import re # Import the regular expression module
 
-def clean_stations(stations_df):
+# --- Configuration des Chemins ---
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# --- Fonction "Outil" pour le calcul Géospatial ---
+# (count_poi_nearby function remains exactly the same as before)
+def count_poi_nearby(station_row, poi_df, radius_meters):
+    try:
+        station_coords = (station_row['position_lat'], station_row['position_lon'])
+        count = 0
+        for _, poi_row in poi_df.iterrows():
+            poi_coords = (poi_row['lat'], poi_row['lon'])
+            distance = great_circle(station_coords, poi_coords).meters
+            if distance <= radius_meters:
+                count += 1
+        return count
+    except Exception as e:
+        print(f"Erreur de calcul géospatial : {e}", file=sys.stderr)
+        return -1
+
+# --- Fonction Principale de Transformation ---
+def transform_data(stations_df, poi_metro_df, poi_bus_df):
     """
-    Clean and validate airport data
-    
-    Args:
-        stations_df (pandas.DataFrame): Raw stations data from CSV
-        
-    Returns:
-        pandas.DataFrame: Cleaned stations data
+    Nettoie les données des vélos, supprime le préfixe numérique du nom,
+    supprime la colonne 'number', et enrichit avec les données de transport.
     """
     if stations_df.empty:
-        print("⚠️  No stations data to clean")
-        return stations_df
-    
-    print(f"🧹 Cleaning stations data...")
-    print(f"Starting with {len(stations_df)} stations")
-    
-    # Make a copy to avoid modifying the original
-    df = stations_df.copy()
-    
-    # Remove rows with missing position or adress
-    df = df.dropna(subset=['position', 'address'])
-    
-    # Handle missing names (replace empty strings or 'N' with None)
-    df['name'] = df['name'].replace(['', 'N', '\\N'], None) 
+        print("⚠️  Aucune donnée de station à transformer.")
+        return pd.DataFrame()
 
-    df = df[(df['status'] == "OPEN")]
+    print(f"🔄 Nettoyage et transformation de {len(stations_df)} stations...")
+    
+    # 1. Nettoyage initial (comme avant)
+    try:
+        df = stations_df.copy()
+        df = df.dropna(subset=['position', 'address'])
+        df = df[(df['status'] == "OPEN")]
 
-    # Extraire 'lat' et 'lng' depuis le dictionnaire 'position'
-    df['lat'] = df['position'].apply(lambda x: x['lat'])
-    df['lng'] = df['position'].apply(lambda x: x['lng'])
-    df = df.drop('position', axis=1)
-    
-    # Print how many stations remain after cleaning
-    print(f"After cleaning: {len(df)} stations remain")
-    return df
+        df['position_lat'] = df['position'].apply(lambda x: x.get('lat'))
+        df['position_lon'] = df['position'].apply(lambda x: x.get('lng')) 
+        
+        df = df.dropna(subset=['position_lat', 'position_lon'])
+        df['last_updated'] = pd.to_datetime('now', utc=True)
+        
+        # --- MODIFICATION 1: Nettoyer le nom de la station ---
+        # Utilise une expression régulière pour supprimer "XXXXX - " au début
+        df['name'] = df['name'].str.replace(r'^\d+\s*-\s*', '', regex=True).str.strip()
+        # ----------------------------------------------------
 
-def validate_data_quality(df):
-    """
-    Helper function to check data quality
-    
-    Args:
-        df (pandas.DataFrame): Data to validate
-    """
-    if df.empty:
-        print(f"⚠️  No stations data to validate")
-        return
-    
-    print(f"📊 Stations quality report :")
-    print(f"   Total records: {len(df)}")
-    
-    # Check for missing values
-    missing_values = df.isnull().sum()
-    if missing_values.any():
-        print("   Missing values:")
-        for col, count in missing_values[missing_values > 0].items():
-            print(f"     {col}: {count}")
+        # --- MODIFICATION 2: Sélectionner les colonnes SANS 'number' ---
+        cleaned_df = df[[
+            # 'number', # <-- Commenté pour le supprimer
+            'name', 
+            'address', 
+            'available_bikes', 
+            'available_bike_stands', 
+            'status',
+            'position_lat', 
+            'position_lon', 
+            'last_updated'
+        ]].copy()
+        # -----------------------------------------------------------
+        
+        print(f"✅ Nettoyage terminé. {len(cleaned_df)} stations valides restantes.")
+        
+    except Exception as e:
+        print(f"❌ ERREUR pendant le nettoyage des vélos : {e}", file=sys.stderr)
+        return pd.DataFrame() 
+
+    # 2. Enrichissement (comme avant)
+    if not poi_metro_df.empty:
+        print("Enrichissement avec les stations de métro (rayon 500m)...")
+        cleaned_df['metro_stations_nearby_500m'] = cleaned_df.apply(
+            count_poi_nearby, axis=1, poi_df=poi_metro_df, radius_meters=500 
+        )
     else:
-        print("   ✅ No missing values")
+        print("⚠️ Données de métro non disponibles, enrichissement sauté.")
+        cleaned_df['metro_stations_nearby_500m'] = 0
 
-if __name__ == "__main__":
-    """Test the transformation functions with sample data"""
-    print("Testing transformation functions...\n")
+    if not poi_bus_df.empty:
+        print("Enrichissement avec les arrêts de bus (rayon 200m)...")
+        cleaned_df['bus_stops_nearby_200m'] = cleaned_df.apply(
+            count_poi_nearby, axis=1, poi_df=poi_bus_df, radius_meters=200 
+        )
+    else:
+        print("⚠️ Données de bus non disponibles, enrichissement sauté.")
+        cleaned_df['bus_stops_nearby_200m'] = 0
+
+    print("✅ Enrichissement géospatial terminé.")
     
-    # Create sample airport data for testing
-    df = pd.read_csv("ETL-Cambiar/data/stations_velo.csv")
-    
-    # Test airport cleaning
-    cleaned_stations = clean_stations(df)
-    validate_data_quality(cleaned_stations)
-    cleaned_stations.to_csv('ETL-Cambiar/data/stations_velo_cleaned.csv')
-    
-    print("\nTransformation testing complete!")
+    # 3. Sauvegarder (comme avant)
+    try:
+        enriched_file_path = BASE_DIR / "data" / "stations_cleaned_and_enriched.csv"
+        cleaned_df.to_csv(enriched_file_path, index=False)
+        print(f"Données enrichies sauvegardées dans {enriched_file_path}")
+    except Exception as e:
+        print(f"❌ Impossible de sauvegarder le CSV enrichi : {e}", file=sys.stderr)
+
+    return cleaned_df
+

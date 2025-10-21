@@ -1,91 +1,87 @@
 """
-Data Extraction Module
-
-This module handles extracting data from :
-- Bike stations data from OpenSky JCDecaux API
+Module d'Extraction des Données VéloToulouse (JCDecaux)
 """
 
 import pandas as pd
 import requests
-import time
 import os
+import sys
 
+# Clé API JCDecaux 
+
+API_KEY = "ab168389738c556afb9ff7bd969c01c47b8c22f8"
+CONTRACT_NAME = "toulouse"
 
 def extract_stations():
     """
-    Extract bike stations data from JCDecaux API
+    Extrait les données des stations de vélos depuis l'API JCDecaux.
     
-    Returns:
-        pandas.DataFrame: Stations data with current stations occupation
+    Retourne:
+        pandas.DataFrame: Données des stations avec leur occupation actuelle.
+                         Retourne un DataFrame vide en cas d'erreur.
     """
-    print("🌐 Fetching live stations data from API...")
+    print("🌐 Récupération des données stations depuis l'API JCDecaux...")
     
-    # API endpoint for JCDecaux
-    url = "https://api.jcdecaux.com/vls/v1/stations?contract=toulouse&apiKey=ab168389738c556afb9ff7bd969c01c47b8c22f8"
+    url = f"https://api.jcdecaux.com/vls/v1/stations?contract={CONTRACT_NAME}&apiKey={API_KEY}"
     
     try:
-        print("Making API request... (this may take a few seconds)")
+        print("Appel API en cours...")
+        # Timeout augmenté pour les connexions lentes
+        response = requests.get(url, timeout=30) 
         
-        # Make the API request using requests.get()
-        response = requests.get(url, timeout=30)
+        # Lève une exception si le statut n'est pas 200 (OK)
+        response.raise_for_status() 
         
-        # Check if the response is successful
-        response.status_code == 200
-        
-        # Get the JSON data from the response
         data = response.json()
         
-        # Convert to DataFrame
+        # Convertit les données JSON en DataFrame pandas
         df = pd.DataFrame(data)
-        df.to_csv('data/stations_velo.csv')
         
-        # Print how many stations were found
-        print(f"Found {len(df)} stations")
-        
+       
+
+        print(f"✅ {len(df)} stations trouvées.")
         return df
         
     except requests.exceptions.RequestException as e:
-        print(f"❌ Network error fetching stations data: {e}")
-        return pd.DataFrame()
+        # Gère les erreurs réseau (timeout, DNS, etc.)
+        print(f"❌ Erreur réseau lors de la récupération des stations: {e}", file=sys.stderr)
+        return pd.DataFrame() # Retourne un DataFrame vide
     except Exception as e:
-        print(f"❌ Error processing stations data: {e}")
-        return pd.DataFrame()
+        # Gère les autres erreurs (JSON invalide, etc.)
+        print(f"❌ Erreur lors du traitement des données stations: {e}", file=sys.stderr)
+        return pd.DataFrame() # Retourne un DataFrame vide
 
 def test_api_connection():
     """
-    Test function to check if the JCDecaux API is accessible
-    Students can use this to debug connection issues
+    Vérifie si l'API JCDecaux est accessible.
     """
-    print("🔍 Testing API connection...")
+    print("\n🔍 Test de la connexion à l'API...")
+    url = f"https://api.jcdecaux.com/vls/v1/stations?contract={CONTRACT_NAME}&apiKey={API_KEY}"
     
     try:
-        response = requests.get(
-            "https://api.jcdecaux.com/vls/v1/stations?contract=toulouse&apiKey=ab168389738c556afb9ff7bd969c01c47b8c22f8",
-            timeout=5
-        )
+        response = requests.get(url, timeout=10)
         
         if response.status_code == 200:
-            data = response.json()
-            stations_count = len(data)
-            print(f"✅ API connection successful! Found {stations_count} stations in test area")
+            print("✅ Connexion API réussie.")
             return True
         else:
-            print(f"⚠️ API returned status code: {response.status_code}")
+            print(f"⚠️ Connexion API échouée. Statut: {response.status_code}")
             return False
             
     except Exception as e:
-        print(f"❌ API connection failed: {e}")
+        print(f"❌ Connexion API échouée: {e}")
         return False
 
+# Ce bloc est exécuté seulement si on lance ce fichier directement
+# (par exemple: python src/extract_data.py)
 if __name__ == "__main__":
-    """Test the extraction functions"""
-    print("Testing extraction functions...\n")
+    print("--- Test du module d'extraction ---")
     
-    
-    # Test API connection first
     if test_api_connection():
-        # Test stations extraction
-        stations = extract_stations()
-        print(f"Stations extraction returned DataFrame with shape: {stations.shape}")
+        stations_data = extract_stations()
+        if not stations_data.empty:
+            print(f"\nExtraction réussie. DataFrame shape: {stations_data.shape}")
+            print("Aperçu des données :")
+            print(stations_data.head())
     else:
-        print("Skipping stations extraction due to API issues")
+        print("\nSkipping extraction test due to API connection issues.")
