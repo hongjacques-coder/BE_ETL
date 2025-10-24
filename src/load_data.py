@@ -14,8 +14,8 @@ import sys # Pour afficher les erreurs
 # Comme indiqué dans le README, modifiez ces valeurs
 # pour correspondre à votre configuration PostgreSQL.
 DATABASE_CONFIG = {
-    'username': 'jacques',      # <-- REMPLACEZ PAR VOTRE NOM D'UTILISATEUR
-    'password': 'Noixcoco1704', # <-- REMPLACEZ PAR VOTRE MOT DE PASSE
+    'username': 'votre_username',      # <-- REMPLACEZ PAR VOTRE NOM D'UTILISATEUR
+    'password': 'votre_mdp', # <-- REMPLACEZ PAR VOTRE MOT DE PASSE
     'host': 'localhost',
     'port': '5432',
     'database': 'stations_db'

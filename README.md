@@ -10,7 +10,7 @@ Welcome to the BE ETL Pipeline!
 1. **Fork this repository** to your GitHub account
 2. **Clone your fork** locally:
   ```bash
-  git clone https://github.com/YOUR_USERNAME/BE_ETL.git
+  git clone https://github.com/hongjacques-coder/BE_ETL
   cd BE_ETL
   ```
 
